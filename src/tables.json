@@ -1,0 +1,14 @@
+{
+  "player": {
+    "name": "player",
+    "build": "CREATE TABLE player (allyCode text primary key, playerId text, data JSON, ttl int)",
+    "json": true,
+    "ttl": 300
+  },
+  "guild": {
+    "name": "guild",
+    "build": "CREATE TABLE guild (id text primary key, name text, data JSON, ttl int)",
+    "json": true,
+    "ttl": 300
+  }
+}
