@@ -1,18 +1,19 @@
 'use strict'
 const log = require('logger')
 const rqlite = require('./rqlite')
-const init = async()=>{
+const InitDB = async()=>{
   try{
     let status = await rqlite.init()
     if(status){
       require('./express')
       return
     }else{
-      setTimeout(init, 5000)
+      setTimeout(InitDB, 5000)
     }
   }catch(e){
+    console.log(e)
     log.error(e)
-    setTimeout(init, 5000)
+    setTimeout(InitDB, 5000)
   }
 }
-init()
+InitDB()

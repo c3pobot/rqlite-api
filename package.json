@@ -12,11 +12,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@babel/runtime": "^7.23.9",
     "body-parser": "^1.20.2",
     "compression": "^1.7.4",
     "express": "^4.18.2",
     "logger": "github:c3pobot/logger",
-    "rqlite-js": "^2.5.6"
+    "rqlite-client": "github:c3pobot/rqlite-client"
   }
 }

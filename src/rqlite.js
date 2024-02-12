@@ -1,50 +1,18 @@
 'use strict'
-const { DataApiClient } = require('rqlite-js');
-const RQLITE_HOST = process.env.RQLITE_HOST || 'http://rqlite-svc-internal:4001'
-
-const client = new DataApiClient(RQLITE_HOST);
+const rqlite = require('rqlite-client')
 const tables = require('./tables.json')
-
-const getError = (results)=>{
-  try{
-    let error = results?.getFirstError()
-    if(error) return JSON.parse(error?.toString())?.error
-  }catch(e){
-    throw(e)
-  }
-}
-const checkTableExists = async(tableName)=>{
-  try{
-    let result = await client.query(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`)
-    if(!result) return
-    if(result?.hasError()){
-      let error = getError(result)
-      if(error?.startsWith(`table ${tableName} already exists`)) return true
-      return
-    }
-    if(result?.get(0)?.data?.name === tableName) return true
-  }catch(e){
-    throw(e)
-  }
-}
-const createTable = async(sql)=>{
-  try{
-    let result = await client.execute(sql)
-    if(result?.get(0)?.rowsAffected) return true
-  }catch(e){
-    throw(e)
-  }
-}
+const log = require('logger')
+const client = new rqlite({ host: process.env.RQLITE_HOST })
 const init = async()=>{
   try{
     let count = 0, created = 0
     for(let i in tables){
       count++
-      let exists = await checkTableExists(tables[i].name)
+      let exists = await client.checkTableExists(tables[i].name)
       if(exists){
         created++
       }else{
-        let results = await createTable(tables[i].build)
+        let results = await client.createTable(tables[i].build)
         if(results) created++
       }
     }
@@ -53,36 +21,56 @@ const init = async()=>{
     throw(e)
   }
 }
-const set = async(table, value, altValue, data, expireSeconds, noTTL = false)=>{
+module.exports.init = init
+module.exports.get = async(req, res)=>{
   try{
-    if(!table || !value || !data) return
-    if(!tables[table]) return
-    let ttl, string = data, expireTime = expireSeconds || tables[table]?.ttl
-    if(expireTime && !noTTL) ttl = Date.now() + expireTime * 1000
-    if(tables[table]?.json) string = JSON.stringify(string)
-    let sql = `INSERT OR REPLACE INTO ${table} VALUES('${value}', '${altValue}', '${string}', ${ttl})`
-    let results = await client.execute(sql)
-    return results?.get(0)?.rowsAffected
-  }catch(e){
-    throw(e)
-  }
-}
-
-const get = async(table, key, value)=>{
-  try{
-    if(!table || !key || !value) return
-    if(!tables[table]) return
-    let sql = `SELECT * FROM ${table} WHERE ${key} = '${value}'`
-    let results = await client.query(sql)
-    let data = results.get(0)?.data?.data
+    let args = req?.path?.replace('/get/', '')?.split('/')
+    let ttl = true
+    if(req.get('noTTL')) ttl = false
+    if(args.length !== 3){
+      res.sendStatus(400)
+      return
+    }
+    if(!tables[args[0]]){
+      res.sendStatus(400)
+      return
+    }
+    let data = await client.get(args[0], args[1], args[2], ttl)
     if(data){
-      if(tables[table]) return JSON.parse(data)
-      return data
+      if(tables[args[0]].json) res.setHeader('Content-Type', 'application/json')
+      res.send(data)
+    }else{
+      res.sendStatus(400)
     }
   }catch(e){
-    throw(e)
+    log.error(e)
+    res.sendStatus(400)
   }
 }
-module.exports.init = init
-module.exports.set = set
-module.exports.get = get
+module.exports.set = async(req, res)=>{
+  try{
+    if(!req.body){
+      res.sendStatus(400)
+      return
+    }
+    console.log('has body')
+    let ttl = req.body?.ttl, table = req.body.cache || req.body.table, data = req.body.data
+    if(!tables[table]){
+      res.sendStatus(400)
+      return
+    }
+    console.log('has table')
+    if(!ttl && !req.body?.noTTL) ttl = tables[table].ttl
+    if(tables[table].json) data = JSON.stringify(data)
+    let result = await client.setJSON(table, req.body.key, req.body.altKey, req.body.data, ttl)
+    console.log(result)
+    if(result){
+      res.sendStatus(200)
+    }else{
+      res.sendStatus(400)
+    }
+  }catch(e){
+    log.error(e)
+    res.sendStatus(400)
+  }
+}
